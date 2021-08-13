@@ -1,0 +1,18 @@
+@make_variables@
+VPATH=@srcdir@
+MODNAME=Allegro
+OBJS=Allegro.o
+CFLAGS=@ALLEGRO_CFLAGS@
+MODULE_LDFLAGS=@LDFLAGS@ @LIBS@ @ALLEGRO_LIBS@
+CONFIG_HEADERS=@CONFIG_HEADERS@
+AUTODOC_SRC_IN=Allegro.c
+
+# Reset the symbol prefix base to the empty string.
+PRECOMPILER_ARGS="--base="
+
+@dynamic_module_makefile@
+
+# Compatibility with stupid makes.
+Allegro.o:$(SRCDIR)/Allegro.c
+
+@dependencies@

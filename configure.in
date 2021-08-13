@@ -1,0 +1,12 @@
+AC_INIT([Allegro.cmod])
+
+AC_MODULE_INIT()
+AC_CONFIG_HEADER([Allegro_config.h])
+
+ALLEGRO_CFLAGS=`pkg-config --cflags allegro-5`
+ALLEGRO_LIBS=`pkg-config --libs allegro-5 allegro_acodec-5 allegro_audio-5 allegro_font-5 allegro_image-5 allegro_primitives-5 allegro_ttf-5 allegro_video-5`
+AC_SUBST([ALLEGRO_CFLAGS])
+AC_SUBST([ALLEGRO_LIBS])
+
+AC_OUTPUT([Makefile],[echo FOO > stamp-h])
+

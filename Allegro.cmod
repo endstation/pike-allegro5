@@ -1,0 +1,2654 @@
+#include "global.h"
+#include "stralloc.h"
+#include "pike_macros.h"
+#include "program.h"
+#include "program_id.h"
+#include "operators.h"
+#include "fdlib.h"
+#include "fd_control.h"
+#include "backend.h"
+#include "module_support.h"
+#include "array.h"
+#include "builtin_functions.h"
+#include "mapping.h"
+#include "pike_types.h"
+#include "threads.h"
+
+#include "Allegro_config.h"
+#include <allegro5/allegro.h>
+#include <allegro5/allegro_image.h>
+#include <allegro5/keyboard.h>
+#include <allegro5/events.h>
+#include <allegro5/display.h>
+#include <allegro5/allegro_font.h>
+#include <allegro5/allegro_ttf.h>
+#include <allegro5/allegro_primitives.h>
+#include <allegro5/allegro_audio.h>
+#include <allegro5/allegro_acodec.h>
+#include <allegro5/allegro_opengl.h>
+#include "constants.h"
+#include <stdbool.h>
+
+// NOTE: uncomment the following if linker complains about "undefined hidden
+// symbol '__dso_handle'":
+void* __dso_handle;
+
+DECLARATIONS
+
+#define RETURN_THIS ref_push_object(Pike_fp->current_object)
+#define INSTALL_ERROR(X) Pike_error("Cannot install %s subsystem.\n", (X));
+
+/*! @module Allegro 
+ *! Allegro is a cross-platform library aimed mainly at video game and
+ *! multimedia programming.
+ *! 
+ *! This Pike module wraps the core structs of the original C library in 
+ *! Pike classes and then allows you to call related methods on them.
+ *! For example, in C you would call @tt{al_create_display()@} to get a
+ *! pointer to an @tt{ALLEGRO_DISPLAY@} struct and then use that as an argument
+ *! for future calls to 'display' functions.
+ *!
+ *! @code
+ *!   ALLEGRO_DISPLAY* mydisplay = al_create_display(640, 480);
+ *!   al_display_flip(mydisplay);
+ *! @endcode
+ *!
+ *! Whereas in Pike, you first create an @tt{Allegro.Display@} object and then
+ *! call methods on it.
+ *!
+ *! @code
+ *!   object mydisplay = Allegro.Display(640, 480);
+ *!   mydisplay->flip();
+ *! @endcode 
+ *!
+ *! Other than this, the module follows the C API very closely and most of the
+ *! official guide is relevant also to Pike.  
+ *!
+ *! See: liballeg.org/a5docs/trunk/getting_started.html
+ *!
+ *! @decl constant ADDON_ACODEC
+ *!
+ *! @decl constant ADDON_FONT
+ *!
+ *! @decl constant ADDON_IMAGE
+ *!
+ *! @decl constant ADDON_PRIMITIVES
+ *!
+ *! @decl constant ADDON_TTF
+ *!
+ *! @decl constant EVENT_DISPLAY_CLOSE
+ *!
+ *! @decl constant EVENT_DISPLAY_EXPOSE
+ *!
+ *! @decl constant EVENT_DISPLAY_FOUND
+ *!
+ *! @decl constant EVENT_DISPLAY_LOST
+ *!
+ *! @decl constant EVENT_DISPLAY_ORIENTATION
+ *!
+ *! @decl constant EVENT_DISPLAY_RESIZE
+ *!
+ *! @decl constant EVENT_DISPLAY_SWITCH_IN
+ *!
+ *! @decl constant EVENT_DISPLAY_SWITCH_OUT
+ *!
+ *! @decl constant EVENT_JOYSTICK_AXIS
+ *!
+ *! @decl constant EVENT_JOYSTICK_BUTTON_DOWN
+ *!
+ *! @decl constant EVENT_JOYSTICK_BUTTON_UP
+ *!
+ *! @decl constant EVENT_JOYSTICK_CONFIGURATION
+ *!
+ *! @decl constant EVENT_KEY_CHAR
+ *!
+ *! @decl constant EVENT_KEY_DOWN
+ *!
+ *! @decl constant EVENT_KEY_UP
+ *!
+ *! @decl constant EVENT_MOUSE_AXES
+ *!
+ *! @decl constant EVENT_MOUSE_BUTTON_DOWN
+ *!
+ *! @decl constant EVENT_MOUSE_BUTTON_UP
+ *!
+ *! @decl constant EVENT_MOUSE_ENTER_DISPLAY
+ *!
+ *! @decl constant EVENT_MOUSE_LEAVE_DISPLAY
+ *!
+ *! @decl constant EVENT_MOUSE_WARPED
+ *!
+ *! @decl constant EVENT_SOURCE_JOYSTICK
+ *!
+ *! @decl constant EVENT_SOURCE_KEYBOARD
+ *!
+ *! @decl constant EVENT_SOURCE_MOUSE
+ *!
+ *! @decl constant EVENT_TIMER
+ *!
+ *! @decl constant KEYMOD_ACCENT1
+ *!
+ *! @decl constant KEYMOD_ACCENT2
+ *!
+ *! @decl constant KEYMOD_ACCENT3
+ *!
+ *! @decl constant KEYMOD_ACCENT4
+ *!
+ *! @decl constant KEYMOD_ALT
+ *!
+ *! @decl constant KEYMOD_ALTGR
+ *!
+ *! @decl constant KEYMOD_CAPSLOCK
+ *!
+ *! @decl constant KEYMOD_COMMAND
+ *!
+ *! @decl constant KEYMOD_CTRL
+ *!
+ *! @decl constant KEYMOD_INALTSEQ
+ *!
+ *! @decl constant KEYMOD_LWIN
+ *!
+ *! @decl constant KEYMOD_MENU
+ *!
+ *! @decl constant KEYMOD_NUMLOCK
+ *!
+ *! @decl constant KEYMOD_RWIN
+ *!
+ *! @decl constant KEYMOD_SCROLLLOCK
+ *!
+ *! @decl constant KEYMOD_SHIFT
+ *!
+ *! @decl constant KEY_0
+ *!
+ *! @decl constant KEY_1
+ *!
+ *! @decl constant KEY_2
+ *!
+ *! @decl constant KEY_3
+ *!
+ *! @decl constant KEY_4
+ *!
+ *! @decl constant KEY_5
+ *!
+ *! @decl constant KEY_6
+ *!
+ *! @decl constant KEY_7
+ *!
+ *! @decl constant KEY_8
+ *!
+ *! @decl constant KEY_9
+ *!
+ *! @decl constant KEY_A
+ *!
+ *! @decl constant KEY_ABNT_C1
+ *!
+ *! @decl constant KEY_ALT
+ *!
+ *! @decl constant KEY_ALTGR
+ *!
+ *! @decl constant KEY_AT
+ *!
+ *! @decl constant KEY_B
+ *!
+ *! @decl constant KEY_BACKQUOTE
+ *!
+ *! @decl constant KEY_BACKSLASH
+ *!
+ *! @decl constant KEY_BACKSLASH2
+ *!
+ *! @decl constant KEY_BACKSPACE
+ *!
+ *! @decl constant KEY_C
+ *!
+ *! @decl constant KEY_CAPSLOCK
+ *!
+ *! @decl constant KEY_CIRCUMFLEX
+ *!
+ *! @decl constant KEY_CLOSEBRACE
+ *!
+ *! @decl constant KEY_COLON2
+ *!
+ *! @decl constant KEY_COMMA
+ *!
+ *! @decl constant KEY_COMMAND
+ *!
+ *! @decl constant KEY_CONVERT
+ *!
+ *! @decl constant KEY_D
+ *!
+ *! @decl constant KEY_DELETE
+ *!
+ *! @decl constant KEY_DOWN
+ *!
+ *! @decl constant KEY_E
+ *!
+ *! @decl constant KEY_END
+ *!
+ *! @decl constant KEY_ENTER
+ *!
+ *! @decl constant KEY_EQUALS
+ *!
+ *! @decl constant KEY_ESCAPE
+ *!
+ *! @decl constant KEY_F
+ *!
+ *! @decl constant KEY_F1
+ *!
+ *! @decl constant KEY_F10
+ *!
+ *! @decl constant KEY_F11
+ *!
+ *! @decl constant KEY_F12
+ *!
+ *! @decl constant KEY_F2
+ *!
+ *! @decl constant KEY_F3
+ *!
+ *! @decl constant KEY_F4
+ *!
+ *! @decl constant KEY_F5
+ *!
+ *! @decl constant KEY_F6
+ *!
+ *! @decl constant KEY_F7
+ *!
+ *! @decl constant KEY_F8
+ *!
+ *! @decl constant KEY_F9
+ *!
+ *! @decl constant KEY_FULLSTOP
+ *!
+ *! @decl constant KEY_G
+ *!
+ *! @decl constant KEY_H
+ *!
+ *! @decl constant KEY_HOME
+ *!
+ *! @decl constant KEY_I
+ *!
+ *! @decl constant KEY_INSERT
+ *!
+ *! @decl constant KEY_J
+ *!
+ *! @decl constant KEY_K
+ *!
+ *! @decl constant KEY_KANA
+ *!
+ *! @decl constant KEY_KANJI
+ *!
+ *! @decl constant KEY_L
+ *!
+ *! @decl constant KEY_LCTRL
+ *!
+ *! @decl constant KEY_LEFT
+ *!
+ *! @decl constant KEY_LSHIFT
+ *!
+ *! @decl constant KEY_LWIN
+ *!
+ *! @decl constant KEY_M
+ *!
+ *! @decl constant KEY_MAX
+ *!
+ *! @decl constant KEY_MENU
+ *!
+ *! @decl constant KEY_MINUS
+ *!
+ *! @decl constant KEY_MODIFIERS
+ *!
+ *! @decl constant KEY_N
+ *!
+ *! @decl constant KEY_NOCONVERT
+ *!
+ *! @decl constant KEY_NUMLOCK
+ *!
+ *! @decl constant KEY_O
+ *!
+ *! @decl constant KEY_OPENBRACE
+ *!
+ *! @decl constant KEY_P
+ *!
+ *! @decl constant KEY_PAD_0
+ *!
+ *! @decl constant KEY_PAD_1
+ *!
+ *! @decl constant KEY_PAD_2
+ *!
+ *! @decl constant KEY_PAD_3
+ *!
+ *! @decl constant KEY_PAD_4
+ *!
+ *! @decl constant KEY_PAD_5
+ *!
+ *! @decl constant KEY_PAD_6
+ *!
+ *! @decl constant KEY_PAD_7
+ *!
+ *! @decl constant KEY_PAD_8
+ *!
+ *! @decl constant KEY_PAD_9
+ *!
+ *! @decl constant KEY_PAD_ASTERISK
+ *!
+ *! @decl constant KEY_PAD_DELETE
+ *!
+ *! @decl constant KEY_PAD_ENTER
+ *!
+ *! @decl constant KEY_PAD_EQUALS
+ *!
+ *! @decl constant KEY_PAD_MINUS
+ *!
+ *! @decl constant KEY_PAD_PLUS
+ *!
+ *! @decl constant KEY_PAD_SLASH
+ *!
+ *! @decl constant KEY_PAUSE
+ *!
+ *! @decl constant KEY_PGDN
+ *!
+ *! @decl constant KEY_PGUP
+ *!
+ *! @decl constant KEY_PRINTSCREEN
+ *!
+ *! @decl constant KEY_Q
+ *!
+ *! @decl constant KEY_QUOTE
+ *!
+ *! @decl constant KEY_R
+ *!
+ *! @decl constant KEY_RCTRL
+ *!
+ *! @decl constant KEY_RIGHT
+ *!
+ *! @decl constant KEY_RSHIFT
+ *!
+ *! @decl constant KEY_RWIN
+ *!
+ *! @decl constant KEY_S
+ *!
+ *! @decl constant KEY_SCROLLLOCK
+ *!
+ *! @decl constant KEY_SEMICOLON
+ *!
+ *! @decl constant KEY_SEMICOLON2
+ *!
+ *! @decl constant KEY_SLASH
+ *!
+ *! @decl constant KEY_SPACE
+ *!
+ *! @decl constant KEY_T
+ *!
+ *! @decl constant KEY_TAB
+ *!
+ *! @decl constant KEY_TILDE
+ *!
+ *! @decl constant KEY_U
+ *!
+ *! @decl constant KEY_UNKNOWN
+ *!
+ *! @decl constant KEY_UP
+ *!
+ *! @decl constant KEY_V
+ *!
+ *! @decl constant KEY_W
+ *!
+ *! @decl constant KEY_X
+ *!
+ *! @decl constant KEY_Y
+ *!
+ *! @decl constant KEY_YEN
+ *!
+ *! @decl constant KEY_Z
+ *!
+ *! @decl constant PIXEL_SHADER
+ *!
+ *! @decl constant PLAYMODE_BIDIR
+ *!
+ *! @decl constant PLAYMODE_LOOP
+ *!
+ *! @decl constant PLAYMODE_ONCE
+ *!
+ *! @decl constant SHADER_AUTO
+ *!
+ *! @decl constant SHADER_GLSL
+ *!
+ *! @decl constant SHADER_HLSL
+ *!
+ *! @decl constant SUBSYSTEM_ALL
+ *!
+ *! @decl constant SUBSYSTEM_AUDIO
+ *!
+ *! @decl constant SUBSYSTEM_JOYSTICK
+ *!
+ *! @decl constant SUBSYSTEM_KEYBOARD
+ *!
+ *! @decl constant SUBSYSTEM_MOUSE
+ *!
+ *! @decl constant TTF_MONOCHROME
+ *!
+ *! @decl constant TTF_NO_AUTOHINT
+ *!
+ *! @decl constant TTF_NO_KERNING
+ *!
+ *! @decl constant VERTEX_SHADER
+ */
+
+ALLEGRO_KEYBOARD_STATE *keyboard_state;
+ALLEGRO_MOUSE_STATE *mouse_state;
+
+
+// *************************
+// *** NON-CLASS METHODS ***
+// *************************
+/*! @decl void init(int subsystems)
+ *! 
+ *! Initializes Allegro.
+ */
+PIKEFUN void init(int subsystems)
+{
+    al_init();
+    pop_n_elems(args);
+
+    if (subsystems & __SUBSYSTEM_KEYBOARD__)
+    {
+        if (!al_install_keyboard())
+        {
+            INSTALL_ERROR("keyboard");
+        } // if
+    } // if
+    if (subsystems & __SUBSYSTEM_JOYSTICK__)
+    {
+        if (!al_install_joystick())
+        {
+            INSTALL_ERROR("joystick");
+        } // if
+    } // if
+    if (subsystems & __SUBSYSTEM_MOUSE__)
+    {
+        if (!al_install_mouse())
+        {
+            INSTALL_ERROR("mouse");
+        } // if
+    } // if
+    if (subsystems & __SUBSYSTEM_AUDIO__)
+    {
+        if (!al_install_audio())
+        {
+            INSTALL_ERROR("audio");
+        } // if
+    } // if
+
+} // init()
+
+// FIXME: ignoring return values for now...
+/*! @decl void init_addons(int addons)
+ *! 
+ *! Initializes Allegro addons.
+ */
+PIKEFUN void init_addons(int addons)
+{
+    pop_n_elems(args);
+
+    if (addons & __ADDON_PRIMITIVES__)
+    {
+        if (!al_init_primitives_addon())
+        {
+            INSTALL_ERROR("primitives");
+        } // if
+    } // if
+    if (addons & __ADDON_IMAGE__)
+    {
+        if (!al_init_image_addon())
+        {
+            INSTALL_ERROR("image");
+        } // if
+    } // if
+    if (addons & __ADDON_FONT__)
+    {
+        if (!al_init_font_addon())
+        {
+            INSTALL_ERROR("font");
+        } // if
+    } // if
+    if (addons & __ADDON_TTF__)
+    {
+        if (!al_init_ttf_addon())
+        {
+            INSTALL_ERROR("ttf");
+        } // if
+    } // if
+    if (addons & __ADDON_ACODEC__)
+    {
+        if (!al_init_acodec_addon())
+        {
+            INSTALL_ERROR("acodec");
+        } // if
+    } // if
+
+} // init_addons()
+
+/*! @decl void hold_bitmap_drawing(int(0..1) hold)
+ *! 
+ */
+PIKEFUN void hold_bitmap_drawing(int(0..1) hold)
+{
+    al_hold_bitmap_drawing(hold);
+    pop_n_elems(args);
+
+} // hold_bitmap_drawing()
+
+/*! @decl int(0..1) is_bitmap_drawing_held() 
+ *! 
+ */
+PIKEFUN int(0..1) is_bitmap_drawing_held()
+{
+    bool b = al_is_bitmap_drawing_held();
+    RETURN(b ? 1 : 0);
+
+} // is_bitmap_drawing_held()
+
+/*! @decl int get_num_joysticks() 
+ *! 
+ *! Returns the number of joysticks currently on the system.  This can change
+ *! after a call to @[Allegro.reconfigure_joysticks()] in order to support
+ *! hotplugging.
+ */
+PIKEFUN int get_num_joysticks()
+{
+    RETURN(al_get_num_joysticks());
+
+} // get_num_joysticks()
+
+/*! @decl int(0..1) reconfigure_joysticks() 
+ *! 
+ */
+PIKEFUN int(0..1) reconfigure_joysticks()
+{
+    bool b = al_reconfigure_joysticks();
+    RETURN(b ? 1 : 0);
+
+} // reconfigure_joysticks()
+
+// You should call this before calls to Allegro.key_down() to make sure that
+// keyboard state is up-to-date.
+/*! @decl void get_keyboard_state() 
+ *! 
+ */
+PIKEFUN void get_keyboard_state()
+{
+    al_get_keyboard_state(keyboard_state);
+
+} // get_keyboard_state()
+
+/*! @decl int(0..1) key_down(int keycode) 
+ *! 
+ */
+PIKEFUN int(0..1) key_down(int keycode)
+{
+    bool down = al_key_down(keyboard_state, keycode);
+    RETURN(down ? 1 : 0);
+
+} // key_down()
+
+/*! @decl string keycode_to_name(int keycode) 
+ *! 
+ */
+PIKEFUN string keycode_to_name(int keycode)
+{
+    const char* name = al_keycode_to_name(keycode);
+    pop_n_elems(args);
+    push_text(name);
+
+} // keycode_to_name()
+
+/*! @decl int(0..1) reserve_samples(int n) 
+ *! 
+ */
+PIKEFUN int(0..1) reserve_samples(int n)
+{
+    bool result = al_reserve_samples(n);
+    RETURN(result ? 1 : 0);
+
+} // reserve_samples()
+
+/*! @decl int get_version() 
+ *! 
+ */
+PIKEFUN int get_version()
+{
+    RETURN(al_get_allegro_version());
+
+} // get_version()
+
+/*! @decl string get_version_string()
+ *! Convenience function - returns the version of Allegro as a string.
+ *! @returns
+ *! The version of Allegro on which these bindings are built.  E.g. @tt{5.2.2.1@}.
+ */
+PIKEFUN string get_version_string()
+{
+    uint32_t v = al_get_allegro_version();
+    char v_str[16];
+    sprintf(v_str, "%u.%u.%u.%u", v>>24, (v>>16)&255, (v>>8)&255, v&255);
+    push_text(v_str);
+
+} // get_version_string()
+
+/*! @decl void set_clipping_rectangle(int x, int y, int width, int height) 
+ *! 
+ */
+PIKEFUN void set_clipping_rectangle(int x, int y, int width, int height)
+{
+    al_set_clipping_rectangle(x, y, width, height);
+    pop_n_elems(args);
+
+} // set_clipping_rectangle()
+
+// Returns x, y, width and height of clipping rectangle in a 4-element array.
+/*! @decl array(int) get_clipping_rectangle() 
+ *! Get the clipping rectangle of the target bitmap.
+ *!  
+ *! @returns
+ *!  A 4-element array consisting of the x and y coordinates and the width
+ *!  and height of the clipping rectangle, in that order.
+ */
+PIKEFUN array(int) get_clipping_rectangle()
+{
+    int x, y, width, height;
+    al_get_clipping_rectangle(&x, &y, &width, &height);
+    push_int(x);
+    push_int(y);
+    push_int(width);
+    push_int(height);
+    f_aggregate(4);
+
+} // get_clipping_rectangle()
+
+/*! @decl void reset_clipping_rectangle()
+ *!
+ *! This is equivalent to calling @[Allegro.set_clipping_rectangle()] with
+ *! the arguments @expr{0@}, @expr{0@}, @expr{w@} and @expr{h@}, where 
+ *! @expr{w@} and @expr{h@} are the width and height of the target bitmap.
+ *! Does nothing if there's no target bitmap.
+ */
+PIKEFUN void reset_clipping_rectangle()
+{
+    al_reset_clipping_rectangle();
+
+} // reset_clipping_rectangle()
+
+// Mouse functions.
+/*! @decl int get_mouse_num_axes()
+ */
+PIKEFUN int get_mouse_num_axes()
+{
+    RETURN(al_get_mouse_num_axes());
+
+} // get_mouse_num_axes()
+
+/*! @decl int get_mouse_num_buttons()
+ */
+PIKEFUN int get_mouse_num_buttons()
+{
+    RETURN(al_get_mouse_num_buttons());
+
+} // get_mouse_num_buttons()
+
+/*! @decl void get_mouse_state()
+ *! Save the current state of the mouse for future calls to ...
+ */
+PIKEFUN void get_mouse_state()
+{
+    al_get_mouse_state(mouse_state);
+    
+} // get_mouse_state()
+
+/*! @decl int get_mouse_state_axis(int axis)
+ */
+PIKEFUN int get_mouse_state_axis(int axis)
+{
+    RETURN(al_get_mouse_state_axis(mouse_state, axis));
+
+} // get_mouse_state_axis()
+
+/*! @decl int(0..1) mouse_button_down(int button)
+ *! @note
+ *! Buttons are numbered from 1.
+ */
+PIKEFUN int(0..1) mouse_button_down(int button)
+{
+    bool b = al_mouse_button_down(mouse_state, button);
+    RETURN(b ? 1 : 0);
+
+} // mouse_button_down()
+
+/*! @decl int get_mouse_x()
+ */
+PIKEFUN int get_mouse_x()
+{
+    RETURN(mouse_state->x);
+
+} // get_mouse_x()
+
+/*! @decl int get_mouse_y()
+ */
+PIKEFUN int get_mouse_y()
+{
+    RETURN(mouse_state->y);
+
+} // get_mouse_y()
+
+/*! @decl int(0..1) set_mouse_z(int z) 
+ */
+PIKEFUN int(0..1) set_mouse_z(int z)
+{
+    bool b = al_set_mouse_z(z);
+    RETURN(b ? 1 : 0);
+
+} // set_mouse_z()
+
+/*! @decl int(0..1) set_mouse_w(int w) 
+ */
+PIKEFUN int(0..1) set_mouse_w(int w)
+{
+    bool b = al_set_mouse_w(w);
+    RETURN(b ? 1 : 0);
+
+} // set_mouse_w()
+
+/*! @decl int(0..1) set_mouse_axis(int which, int value)
+ */
+PIKEFUN int(0..1) set_mouse_axis(int which, int value)
+{
+    bool b = al_set_mouse_axis(which, value);
+    RETURN(b ? 1 : 0);
+
+} // set_mouse_axis()
+
+/*! @decl int get_opengl_version()
+ *!
+ *! @returns
+ *!
+ */
+PIKEFUN int get_opengl_version()
+{
+    RETURN al_get_opengl_version();
+
+} // get_opengl_version()
+
+/*! @decl array(int) get_blender()
+ *!
+ *! @returns
+ *! Three-element array containing operation, source and destination of the
+ *! active blender for the current thread.
+ */
+PIKEFUN array(int) get_blender()
+{
+    int op, src, dst;
+    al_get_blender(&op, &src, &dst);
+    push_int(op);
+    push_int(src);
+    push_int(dst);
+    f_aggregate(3);
+
+} // get_blender()
+
+/*! @decl void set_blender(int op, int src, int dst)
+ *!
+ *! @param op
+ *!
+ *! @param src 
+ *!
+ *! @param dst
+ *!
+ */
+PIKEFUN void set_blender(int op, int src, int dst)
+{
+    al_set_blender(op, src, dst);
+    pop_n_elems(args);
+
+} // set_blender()
+
+/*! @decl array(int) get_separate_blender()
+ *!
+ *! @returns
+ *!
+ */
+PIKEFUN array(int) get_separate_blender()
+{
+    int op, src, dst, alpha_op, alpha_src, alpha_dst;
+    al_get_separate_blender(&op, &src, &dst, &alpha_op, &alpha_src, &alpha_dst);
+    push_int(op);
+    push_int(src);
+    push_int(dst);
+    push_int(alpha_op);
+    push_int(alpha_src);
+    push_int(alpha_dst);
+    f_aggregate(6);
+
+} // get_separate_blender()
+
+/*! @decl void set_separate_blender(int op, int src, int dst, int alpha_op, int alpha_src, int alpha_dst)
+ *!
+ *! @param op
+ *!
+ *! @param src 
+ *!
+ *! @param dst
+ *!
+ *! @param alpha_op
+ *!
+ *! @param alpha_src 
+ *!
+ *! @param alpha_dst
+ *!
+ */
+PIKEFUN void set_separate_blender(int op, int src, int dst, int alpha_op, int alpha_src, int alpha_dst)
+{
+    al_set_separate_blender(op, src, dst, alpha_op, alpha_src, alpha_dst);
+    pop_n_elems(args);
+
+} // set_separate_blender()
+
+
+// *****************************
+// *** PIKECLASS EventSource ***
+// *****************************
+/*! @class EventSource
+ *! @[EventSource] objects have no public interface.  They're just here to hold
+ *! the return values of @[AlTimer->get_event_source()] and 
+ *! @[Display->get_event_source()], which you can then register with an
+ *! @[EventQueue].
+ *!
+ *! @seealso
+ *!   @[Allegro.EventQueue->register_source()]
+ */
+PIKECLASS EventSource
+{
+CVAR ALLEGRO_EVENT_SOURCE* source;
+
+INIT
+{
+    THIS->source = NULL;
+} // INIT
+
+EXIT
+{
+    THIS->source = NULL;
+} // EXIT
+
+} // PIKECLASS EventSource
+/*! @endclass EventSource */
+
+
+// ***********************
+// *** PIKECLASS Color ***
+// ***********************
+/*! @class Color
+ */
+PIKECLASS Color
+{
+CVAR ALLEGRO_COLOR color;
+
+// TODO: make sure args are between 0 and 255.
+/*! @decl void create(int r, int g, int b, int a)
+ */
+PIKEFUN void create(int r, int g, int b, int a)
+{
+    THIS->color = al_map_rgba(r, g, b, a);
+    pop_n_elems(args);
+
+} // create()
+
+// TODO: make sure args are between 0 and 255.
+/*! @decl void create(int r, int g, int b)
+ */
+PIKEFUN void create(int r, int g, int b)
+{
+    THIS->color = al_map_rgb(r, g, b);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void create(float r, float g, float b)
+ */
+PIKEFUN void create(float r, float g, float b)
+{
+    THIS->color = al_map_rgb_f(r, g, b);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void create(float r, float g, float b, float a)
+ */
+PIKEFUN void create(float r, float g, float b, float a)
+{
+    THIS->color = al_map_rgba_f(r, g, b, a);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl array(int) unmap_rgba()
+ */
+PIKEFUN array(int) unmap_rgba()
+{
+    unsigned char r, g, b, a;
+    al_unmap_rgba(THIS->color, &r, &g, &b, &a);
+    push_int(r);
+    push_int(g);
+    push_int(b);
+    push_int(a);
+    f_aggregate(4);
+
+} // unmap_rgba()
+
+/*! @decl array(float) unmap_rgba_f()
+ */
+PIKEFUN array(float) unmap_rgba_f()
+{
+    float r, g, b, a;
+    al_unmap_rgba_f(THIS->color, &r, &g, &b, &a);
+    push_float(r);
+    push_float(g);
+    push_float(b);
+    push_float(a);
+    f_aggregate(4);
+
+} // unmap_rgba_f()
+
+} // PIKECLASS Color
+/*! @endclass Color */
+
+
+// ***************************
+// *** PIKECLASS AlTimer ***
+// ***************************
+/*! @class AlTimer
+ */
+PIKECLASS AlTimer
+{
+CVAR ALLEGRO_TIMER* timer;
+
+INIT
+{
+    THIS->timer = NULL;
+} // INIT
+
+EXIT
+{
+    al_destroy_timer(THIS->timer);
+    THIS->timer = NULL;
+} // EXIT
+
+/*! @decl void create(float speed_secs)
+ */
+PIKEFUN void create(float speed_secs)
+{
+    THIS->timer = al_create_timer(speed_secs);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void start()
+ */
+PIKEFUN void start()
+{
+    al_start_timer(THIS->timer);
+
+} // start()
+
+/*! @decl void stop()
+ */
+PIKEFUN void stop()
+{
+    al_stop_timer(THIS->timer);
+
+} // stop()
+
+/*! @decl int(0..1) get_started()
+ */
+PIKEFUN int(0..1) get_started()
+{
+    bool b = al_get_timer_started(THIS->timer);
+    RETURN(b ? 1 : 0);
+
+} // get_started()
+
+// NB: return type of original C function is int64_t.
+/*! @decl int get_count()
+ */
+PIKEFUN int get_count()
+{
+    RETURN(al_get_timer_count(THIS->timer));
+
+} // get_count()
+
+/*! @decl void set_count(int new_count)
+ */
+PIKEFUN void set_count(int new_count)
+{
+    al_set_timer_count(THIS->timer, new_count);
+    pop_n_elems(args);
+
+} // set_count()
+
+/*! @decl void add_count(int diff)
+ */
+PIKEFUN void add_count(int diff)
+{
+    al_add_timer_count(THIS->timer, diff);
+    pop_n_elems(args);
+
+} // add_count()
+
+/*! @decl float get_speed()
+ */
+PIKEFUN float get_speed()
+{
+    RETURN(al_get_timer_speed(THIS->timer));
+
+} // get_speed()
+
+/*! @decl void set_speed(float new_speed_secs)
+ */
+PIKEFUN void set_speed(float new_speed_secs)
+{
+    al_set_timer_speed(THIS->timer, new_speed_secs);
+    pop_n_elems(args);
+
+} // set_speed()
+
+/*! @decl object get_event_source()
+ */
+PIKEFUN object get_event_source()
+{
+    ALLEGRO_EVENT_SOURCE* source = al_get_timer_event_source(THIS->timer);
+    struct object* o = fast_clone_object(EventSource_program);
+    OBJ2_EVENTSOURCE(o)->source = source;
+    RETURN(o);
+
+} // get_event_source()
+
+} // PIKECLASS AlTimer
+/*! @endclass AlTimer */
+
+
+// ************************
+// *** PIKECLASS Bitmap ***
+// ************************
+/*! @class Bitmap
+ */
+PIKECLASS Bitmap
+{
+CVAR ALLEGRO_BITMAP* bitmap;
+
+INIT
+{
+    THIS->bitmap = NULL;
+} // INIT
+
+EXIT
+{
+    if (THIS->bitmap)
+    {
+        al_destroy_bitmap(THIS->bitmap);
+        THIS->bitmap = NULL;
+    } // if
+} // EXIT
+
+/*! @decl void create(string filename)
+ */
+PIKEFUN void create(string filename)
+{
+    THIS->bitmap = al_load_bitmap(filename->str);
+    pop_n_elems(args);
+    if (!THIS->bitmap)
+    {
+        Pike_error("Cannot create bitmap: %s\n", filename->str);
+    } // if
+
+} // create()
+
+/*! @decl void create(int w, int h)
+ */
+PIKEFUN void create(int w, int h)
+{
+    THIS->bitmap = al_create_bitmap(w, h);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void draw(float dx, float dy, int flags)
+ */
+PIKEFUN void draw(float dx, float dy, int flags)
+{
+    al_draw_bitmap(THIS->bitmap, dx, dy, flags);
+    pop_n_elems(args);
+
+} // draw()
+
+/*! @decl void draw_region(float sx, float sy, float sw, float sh, float dx,@
+ *!                        float dy, int flags) 
+ */
+PIKEFUN void draw_region(float sx, float sy, float sw, float sh, float dx,
+        float dy, int flags)
+{
+    al_draw_bitmap_region(THIS->bitmap, sx, sy, sw, sh, dx, dy, flags);
+    pop_n_elems(args);
+
+} // draw_region()
+
+/*! @decl void draw_rotated(float cx, float cy, float dx, float dy,@
+ *!                         float angle, int flags)
+ */
+PIKEFUN void draw_rotated(float cx, float cy, float dx, float dy, float angle,
+        int flags)
+{
+    al_draw_rotated_bitmap(THIS->bitmap, cx, cy, dx, dy, angle, flags);
+    pop_n_elems(args);
+
+} // draw_rotated()
+
+/*! @decl void draw_tinted(object tint, float dx, float dy, int flags)
+ */
+PIKEFUN void draw_tinted(object tint, float dx, float dy, int flags)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(tint)->color;
+    al_draw_tinted_bitmap(THIS->bitmap, p1, dx, dy, flags);
+    pop_n_elems(args);
+    
+} // draw_tinted()
+
+/*! @decl void draw_tinted_region(object tint, float sx, float sy, float sw, @
+ *!         float sh, float dx, float dy, int flags)
+ */
+PIKEFUN void draw_tinted_region(object tint, float sx, float sy, float sw,
+        float sh, float dx, float dy, int flags)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(tint)->color;
+    al_draw_tinted_bitmap_region(THIS->bitmap, p1, sx, sy, sw, sh, dx, dy,
+            flags);
+    pop_n_elems(args);
+
+} // draw_tinted_region()
+
+/*! @decl void draw_scaled(float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, int flags)
+ */
+PIKEFUN void draw_scaled(float sx, float sy, float sw, float sh, float dx, float dy, float dw, float dh, int flags)
+{
+    al_draw_scaled_bitmap(THIS->bitmap, sx, sy, sw, sh, dx, dy, dw, dh, flags);
+    pop_n_elems(args);
+
+} // draw_scaled()
+
+/*! @decl object create_sub_bitmap(int x, int y, int w, int h)
+ */
+PIKEFUN object create_sub_bitmap(int x, int y, int w, int h)
+{
+    ALLEGRO_BITMAP* result = al_create_sub_bitmap(THIS->bitmap, x, y, w, h);
+    struct object* o = fast_clone_object(Bitmap_program);
+    OBJ2_BITMAP(o)->bitmap = result;
+    RETURN(o);
+
+} // create_sub_bitmap()
+
+/*! @decl int get_width()
+ */
+PIKEFUN int get_width()
+{
+    RETURN(al_get_bitmap_width(THIS->bitmap));
+
+} // get_width()
+
+/*! @decl int get_height()
+ */
+PIKEFUN int get_height()
+{
+    RETURN(al_get_bitmap_height(THIS->bitmap));
+
+} // get_height()
+
+// Make this bitmap the current target bitmap.
+/*! @decl void set_as_target()
+ */
+PIKEFUN void set_as_target()
+{
+    al_set_target_bitmap(THIS->bitmap);
+
+} // set_as_target()
+
+/*! @decl int save(string filename)
+ *! Save this Allegro.Bitmap to an image file.  The file type is determined
+ *! by the extension.
+ *! @param filename
+ *! The filename to save to.
+ *! @returns
+ *! 1 on success, 0 on failure.
+ */
+PIKEFUN int save(string filename)
+{
+    bool success = al_save_bitmap(filename->str, THIS->bitmap);
+    RETURN(success);
+
+} // save()
+
+} // PIKECLASS Bitmap
+
+/*! @endclass Bitmap */
+
+
+// *****************************
+// *** PIKECLASS MouseCursor ***
+// *****************************
+/*! @class MouseCursor 
+ */
+PIKECLASS MouseCursor
+{
+CVAR ALLEGRO_MOUSE_CURSOR* mouse_cursor;
+
+INIT
+{
+    THIS->mouse_cursor = NULL;
+} // INIT
+EXIT
+{
+    al_destroy_mouse_cursor(THIS->mouse_cursor);
+    THIS->mouse_cursor = NULL;
+} // EXIT
+
+PIKEFUN void create(object bmp, int x_focus, int y_focus)
+{
+    ALLEGRO_BITMAP* p1 = OBJ2_BITMAP(bmp)->bitmap;
+    THIS->mouse_cursor = al_create_mouse_cursor(p1, x_focus, y_focus);
+    pop_n_elems(args);
+    if (!THIS->mouse_cursor)
+    {
+        Pike_error("Cannot create cursor from bitmap.");
+    } // if
+
+} // create()
+
+} // PIKECLASS MouseCursor
+/*! @endclass MouseCursor */
+
+
+// *************************
+// *** PIKECLASS Display ***
+// *************************
+/*! @class Display
+ */
+PIKECLASS Display
+{
+CVAR ALLEGRO_DISPLAY* display;
+
+INIT
+{
+    THIS->display = NULL;
+} // INIT
+
+EXIT
+{
+    if (THIS->display)
+    {
+        al_destroy_display(THIS->display);
+        THIS->display = NULL;
+    } // if
+} // EXIT
+
+/*! @decl void create(int w, int h)
+ */
+PIKEFUN void create(int w, int h)
+{
+    THIS->display = al_create_display(w, h);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void create(int w, int h, int flags)
+ */
+PIKEFUN void create(int w, int h, int flags)
+{
+    al_set_new_display_flags(flags);
+    THIS->display = al_create_display(w, h);
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void flip()
+ */
+PIKEFUN void flip()
+{
+    al_flip_display();
+
+} // flip()
+
+/*! @decl void set_window_title(string title)
+ */
+PIKEFUN void set_window_title(string title)
+{
+    al_set_window_title(THIS->display, title->str);
+    pop_n_elems(args);
+
+} // set_window_title()
+
+/*! @decl void clear_to_color(object color)
+ */
+PIKEFUN void clear_to_color(object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_clear_to_color(p1);
+    pop_n_elems(args);
+
+} // clear_to_color()
+
+/*! @decl object get_event_source()
+ */
+PIKEFUN object get_event_source()
+{
+    ALLEGRO_EVENT_SOURCE* source = al_get_display_event_source(THIS->display);
+    struct object* o = fast_clone_object(EventSource_program);
+    OBJ2_EVENTSOURCE(o)->source = source;
+    RETURN(o);
+
+} // get_event_source()
+
+PIKEFUN int(0..1) set_mouse_xy(int x, int y)
+{
+    bool b = al_set_mouse_xy(THIS->display, x, y);
+    RETURN(b ? 1 : 0);
+
+} // set_mouse_xy()
+
+/*! @decl int(0..1) hide_mouse_cursor()
+ */
+PIKEFUN int(0..1) hide_mouse_cursor()
+{
+    bool b = al_hide_mouse_cursor(THIS->display);
+    RETURN(b ? 1 : 0);
+
+} // hide_mouse_cursor()
+
+/*! @decl int(0..1) hide_mouse_cursor()
+ */
+PIKEFUN int(0..1) show_mouse_cursor()
+{
+    bool b = al_show_mouse_cursor(THIS->display);
+    RETURN(b ? 1 : 0);
+
+} // show_mouse_cursor()
+
+/*! @decl int(0..1) set_mouse_cursor(object cursor)
+ */
+PIKEFUN int(0..1) set_mouse_cursor(object cursor)
+{
+    ALLEGRO_MOUSE_CURSOR* p1 = OBJ2_MOUSECURSOR(cursor)->mouse_cursor;
+    RETURN(al_set_mouse_cursor(THIS->display, p1));
+
+} // set_mouse_cursor()
+
+/*! @decl object set_target_backbuffer()
+ */
+PIKEFUN void set_target_backbuffer()
+{
+    al_set_target_backbuffer(THIS->display);
+
+} // get_backbuffer()
+
+} // PIKECLASS Display
+/*! @endclass Display */
+
+
+// ***********************
+// *** PIKECLASS Event ***
+// ***********************
+/*! @class Event
+ */
+PIKECLASS Event
+{
+CVAR ALLEGRO_EVENT event;
+
+INIT {}
+EXIT {}
+
+/*! @decl int `type()
+ */
+PIKEFUN int `type()
+{
+    RETURN(THIS->event.type);
+
+} // `type()
+
+/*! @decl int `keycode()
+ */
+PIKEFUN int `keycode()
+{
+    if (THIS->event.type == ALLEGRO_EVENT_KEY_DOWN
+            || THIS->event.type == ALLEGRO_EVENT_KEY_UP
+            || THIS->event.type == ALLEGRO_EVENT_KEY_CHAR)
+    {
+        RETURN(THIS->event.keyboard.keycode);
+    }
+    else
+    {
+        Pike_error("keycode invalid for this event type\n");
+    } // if ... else
+
+} // `keycode()
+
+/*! @decl int `id()
+ */
+PIKEFUN int `id()
+{
+    if (THIS->event.type == ALLEGRO_EVENT_JOYSTICK_BUTTON_DOWN
+            || THIS->event.type == ALLEGRO_EVENT_JOYSTICK_BUTTON_UP
+            || THIS->event.type == ALLEGRO_EVENT_JOYSTICK_AXIS)
+    {
+        RETURN((long) THIS->event.joystick.id);
+    }
+    else
+    {
+        Pike_error("id invalid for this event type\n");
+    } // if ... else
+
+} // `id()
+
+} // PIKECLASS Event
+/*! @endclass Event */
+
+
+// ****************************
+// *** PIKECLASS EventQueue ***
+// ****************************
+/*! @class EventQueue
+ */
+PIKECLASS EventQueue
+{
+CVAR ALLEGRO_EVENT_QUEUE* event_queue;
+
+INIT
+{
+    THIS->event_queue = NULL;
+} // INIT
+
+EXIT
+{
+    if (THIS->event_queue)
+    {
+        al_destroy_event_queue(THIS->event_queue);
+        THIS->event_queue = NULL;
+    } // if
+} // EXIT
+
+/*! @decl void create()
+ */
+PIKEFUN void create()
+{
+    THIS->event_queue = al_create_event_queue();
+
+} // create()
+
+/*! @decl void register_sources(int sources)
+ *! Register one or more of the joystick, keyboard and mouse systems with this
+ *! event queue.
+ *! 
+ *! @param sources
+ *! Logically OR'd combination of any of @[EVENT_SOURCE_JOYSTICK], 
+ *! @[EVENT_SOURCE_KEYBOARD] and @[EVENT_SOURCE_MOUSE].
+ */
+PIKEFUN void register_sources(int sources)
+{
+    if (sources & __EVENT_SOURCE_JOYSTICK__)
+    {
+        al_register_event_source(THIS->event_queue, 
+                al_get_joystick_event_source());
+    } // if
+    if (sources & __EVENT_SOURCE_KEYBOARD__)
+    {
+        al_register_event_source(THIS->event_queue,
+                al_get_keyboard_event_source());
+    } // if
+    if (sources & __EVENT_SOURCE_MOUSE__)
+    {
+        al_register_event_source(THIS->event_queue,
+                al_get_mouse_event_source());
+    } // if
+
+    pop_n_elems(args);
+
+} // register_sources()
+
+/*! @decl void|object get_next()
+ */
+PIKEFUN void|object get_next()
+{
+    ALLEGRO_EVENT ae;
+    bool result = al_get_next_event(THIS->event_queue, &ae);
+    if (result)
+    {
+        struct object* o = fast_clone_object(Event_program);
+        OBJ2_EVENT(o)->event = ae;
+        RETURN(o);
+    } // if
+
+} // get_next()
+
+/*! @decl void flush()
+ */
+PIKEFUN void flush()
+{
+    al_flush_event_queue(THIS->event_queue);
+
+} // flush()
+
+/*! @decl void register_source(object source)
+ *! Register an @[AlTimer] or a @[Display] with the event queue.
+ */
+PIKEFUN void register_source(object source)
+{
+    ALLEGRO_EVENT_SOURCE* p1 = OBJ2_EVENTSOURCE(source)->source;
+    al_register_event_source(THIS->event_queue, p1);
+    pop_n_elems(args);
+
+} // register_source()
+
+/*! @decl void unregister_source(object source)
+ */
+PIKEFUN void unregister_source(object source)
+{
+    ALLEGRO_EVENT_SOURCE* p1 = OBJ2_EVENTSOURCE(source)->source;
+    al_unregister_event_source(THIS->event_queue, p1);
+    pop_n_elems(args);
+
+} // unregister_source()
+
+} // PIKECLASS EventQueue
+/*! @endclass EventQueue */
+
+
+// **************************
+// *** PIKECLASS Joystick ***
+// **************************
+/*! @class Joystick
+ */
+PIKECLASS Joystick
+{
+CVAR ALLEGRO_JOYSTICK* joystick;
+CVAR ALLEGRO_JOYSTICK_STATE joystick_state;
+
+INIT
+{
+    THIS->joystick = NULL;
+} // INIT
+
+/*! @decl void create(int num)
+ */
+PIKEFUN void create(int num)
+{
+    THIS->joystick = al_get_joystick(num);
+    pop_n_elems(args);
+    if (!THIS->joystick)
+    {
+        Pike_error("Cannot create joystick #%d\n", num);
+    } // if
+
+} // create()
+
+/*! @decl string get_name()
+ */
+PIKEFUN string get_name()
+{
+    const char* name;
+    name = al_get_joystick_name(THIS->joystick);
+    pop_n_elems(args);
+    push_text(name);
+
+} // get_name()
+
+/*! @decl int get_num_sticks()
+ */
+PIKEFUN int get_num_sticks()
+{
+    RETURN(al_get_joystick_num_sticks(THIS->joystick));
+
+} // get_num_sticks()
+
+/*! @decl int get_num_axes(int stick)
+ */
+PIKEFUN int get_num_axes(int stick)
+{
+    RETURN(al_get_joystick_num_axes(THIS->joystick, stick));
+
+} // get_num_axes()
+
+/*! @decl int get_num_buttons()
+ */
+PIKEFUN int get_num_buttons()
+{
+    RETURN(al_get_joystick_num_buttons(THIS->joystick));
+
+} // get_num_buttons()
+
+// After calling this, get current state of individual buttons and axes by
+// calling get_button() and get_axis().
+/*! @decl void refresh_state()
+ */
+PIKEFUN void refresh_state()
+{
+    al_get_joystick_state(THIS->joystick, &(THIS->joystick_state));
+
+} // refresh_state()
+
+/*! @decl int get_button(int button)
+ */
+PIKEFUN int get_button(int button)
+{
+    RETURN(THIS->joystick_state.button[button]);
+
+} // get_button()
+
+/*! @decl float get_axis(int stick, int axis)
+ */
+PIKEFUN float get_axis(int stick, int axis)
+{
+    RETURN(THIS->joystick_state.stick[stick].axis[axis]);
+
+} // get_axis()
+
+/*! @decl int get_id()
+ */
+PIKEFUN int get_id()
+{
+    RETURN((long) THIS->joystick);
+
+} // get_id()
+
+} // PIKECLASS Joystick
+/*! @endclass Joystick */
+
+
+// **********************
+// *** PIKECLASS Font ***
+// **********************
+/*! @class Font
+ */
+PIKECLASS Font 
+{
+CVAR ALLEGRO_FONT* font;
+
+INIT
+{
+    THIS->font = NULL;
+} // INIT
+
+EXIT
+{
+    // NOTE: fine to call this function with null pointer.
+    al_destroy_font(THIS->font);
+} // EXIT
+
+/*! @decl void create(string filename, int size, int flags)
+ */
+PIKEFUN void create(string filename, int size, int flags)
+{
+    THIS->font = al_load_font(filename->str, size, flags);
+    pop_n_elems(args);
+    if (!THIS->font)
+    {
+        Pike_error("Cannot load font: %s\n", filename->str);
+    } // if
+
+} // create()
+
+// Create font from an Allegro bitmap.
+/*! @decl void create(object bitmap, array(int) ranges)
+ */
+PIKEFUN void create(object bitmap, array(int) ranges)
+{
+    ALLEGRO_BITMAP* p1 = OBJ2_BITMAP(bitmap)->bitmap;
+    struct array* arr = Pike_sp[-1].u.array;
+    int ranges_n;
+    int* ranges_copy;
+
+    // Size of 'ranges' array must be > 0 and a multiple of 2.
+    if (!arr->size || arr->size % 2)
+    {
+        Pike_error("Invalid ranges.\n");
+    } // if 
+    
+    ranges_n = arr->size / 2;
+    ranges_copy = malloc(sizeof(int) * arr->size);
+    for (int i = 0; i < arr->size; ++i)
+    {
+        ranges_copy[i] = arr->item[i].u.integer;
+    } // for
+
+    THIS->font = al_grab_font_from_bitmap(p1, ranges_n, ranges_copy);
+    free(ranges_copy);
+    if (!THIS->font)
+    {
+        Pike_error("Cannot create font from bitmap.\n");
+    } // if
+
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl void draw_text(object color, float x, float y, int flags, string text)
+ */
+PIKEFUN void draw_text(object color, float x, float y, int flags, string text)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_text(THIS->font, p1, x, y, flags, text->str);
+    pop_n_elems(args);
+
+} // draw_text()
+
+/*! @decl int get_text_width(string str)
+ */
+PIKEFUN int get_text_width(string str)
+{
+    RETURN(al_get_text_width(THIS->font, str->str));
+
+} // get_text_width()
+
+/*! @decl int get_line_height()
+ */
+PIKEFUN int get_line_height()
+{
+    RETURN(al_get_font_line_height(THIS->font));
+
+} // get_line_height()
+
+/*! @decl int get_ascent()
+ */
+PIKEFUN int get_ascent()
+{
+    RETURN(al_get_font_ascent(THIS->font));
+
+} // get_ascent()
+
+/*! @decl int get_descent()
+ */
+PIKEFUN int get_descent()
+{
+    RETURN(al_get_font_descent(THIS->font));
+
+} // get_descent()
+
+/*! @decl void draw_justified_text(object color, float x1, float x2, float y, float diff, int flags, string text) 
+ */
+PIKEFUN void draw_justified_text(object color, float x1, float x2, float y,
+        float diff, int flags, string text)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_justified_text(THIS->font, p1, x1, x2, y, diff, flags, text->str);
+    pop_n_elems(args);
+
+} // draw_justified_text()
+
+} // PIKECLASS Font
+/*! @endclass Font */
+
+// ***************************
+// *** PIKECLASS Transform ***
+// ***************************
+/*! @class Transform
+ */
+PIKECLASS Transform
+{
+CVAR ALLEGRO_TRANSFORM *transform;
+
+INIT
+{
+    THIS->transform = NULL;
+} // INIT
+
+EXIT 
+{
+    if (THIS->transform)
+    {
+        free(THIS->transform);
+        THIS->transform = NULL;
+    } // if
+} // EXIT
+
+// Creates a new Transform and initializes it to the identity transformation.
+/*! @decl void create()
+ */
+PIKEFUN void create()
+{
+    THIS->transform = (ALLEGRO_TRANSFORM*) malloc(sizeof(ALLEGRO_TRANSFORM));
+    al_identity_transform(THIS->transform);
+
+} // create()
+
+/*! @decl void use()
+ */
+PIKEFUN void use()
+{
+    al_use_transform(THIS->transform);
+
+} // use()
+
+/*! @decl void build(float x, float y, float sx, float sy, float theta)
+ */
+PIKEFUN void build(float x, float y, float sx, float sy, float theta)
+{
+    al_build_transform(THIS->transform, x, y, sx, sy, theta);
+    pop_n_elems(args);
+
+} // build()
+
+/*! @decl object translate(float x, float y)
+ *!
+ *! @note
+ *! Method returns the object so calls can be chained together.  E.g.
+ *! @code
+ *! mytransform->translate(5.0, 2.0)->rotate(2.0)->use();
+ *! @endcode
+ */
+PIKEFUN object translate(float x, float y)
+{
+    al_translate_transform(THIS->transform, x, y);
+    pop_n_elems(args);
+    RETURN_THIS;
+
+} // translate()
+
+/*! @decl object rotate(float theta)
+ */
+PIKEFUN object rotate(float theta)
+{
+    al_rotate_transform(THIS->transform, theta);
+    pop_n_elems(args);
+    RETURN_THIS;
+
+} // rotate()
+
+/*! @decl object scale(float sx, float sy)
+ */
+PIKEFUN object scale(float sx, float sy)
+{
+    al_scale_transform(THIS->transform, sx, sy);
+    pop_n_elems(args);
+    RETURN_THIS;
+
+} // scale()
+
+/*! @decl void identity()
+ */
+//PIKEFUN void identity()
+PIKEFUN object identity()
+{
+    al_identity_transform(THIS->transform);
+    RETURN_THIS;
+
+} // identity()
+
+/*! @decl void use_projection()
+ */
+PIKEFUN void use_projection()
+{
+    al_use_projection_transform(THIS->transform);
+
+} // use_projection()
+
+/*! @decl void invert()
+ */
+PIKEFUN object invert()
+{
+    al_invert_transform(THIS->transform);
+    RETURN_THIS;
+
+} // invert()
+
+/*! @decl int check_inverse(float tolerance)
+ *!
+ *! @param tolerance
+ */
+PIKEFUN int check_inverse(float tolerance)
+{
+    RETURN al_check_inverse(THIS->transform, tolerance);
+
+} // check_inverse()
+
+/*! @decl void build_camera(float position_x, float position_y, float position_z, float look_x, float look_y, float look_z, float up_x, float up_y, float up_z)
+ */
+PIKEFUN void build_camera(float position_x, float position_y, float position_z,
+        float look_x, float look_y, float look_z, float up_x, float up_y,
+        float up_z)
+{
+    al_build_camera_transform(THIS->transform, position_x, position_y,
+            position_z, look_x, look_y, look_z, up_x, up_y, up_z);
+    pop_n_elems(args);
+
+} // build_camera()
+
+/*! @decl array(float) transform_coordinates(float x, float y)
+ *! 
+ *! @param x
+ *! 
+ *! @param y
+ *! 
+ *! @returns
+ *! A 2-element array containing the transformed coordinates.
+ */
+PIKEFUN array(float) transform_coordinates(float x, float y)
+{
+    float x_ = x;
+    float y_ = y;
+    pop_n_elems(args);
+    al_transform_coordinates(THIS->transform, &x_, &y_);
+    push_float(x_);
+    push_float(y_);
+    f_aggregate(2);
+
+} // transform_coordinates()
+
+/*! @decl array(float) transform_coordinates_3d(float x, float y, float z)
+ *! 
+ *! @param x
+ *! 
+ *! @param y
+ *! 
+ *! @param z
+ *! 
+ *! @returns
+ *! A 3-element array containing the transformed coordinates.
+ */
+PIKEFUN array(float) transform_coordinates_3d(float x, float y, float z)
+{
+    float x_ = x;
+    float y_ = y;
+    float z_ = z;
+    pop_n_elems(args);
+    al_transform_coordinates_3d(THIS->transform, &x_, &y_, &z_);
+    push_float(x_);
+    push_float(y_);
+    push_float(z_);
+    f_aggregate(3);
+
+} // transform_coordinates_3d()
+
+/*! @decl array(float) transform_coordinates_3d_projective(float x, float y, float z)
+ *! 
+ *! @param x
+ *! 
+ *! @param y
+ *! 
+ *! @param z
+ *! 
+ *! @returns
+ *! A 3-element array containing the transformed coordinates.
+ */
+/*
+PIKEFUN array(float) transform_coordinates_3d_projective(float x, float y,
+        float z)
+{
+    float x_ = x;
+    float y_ = y;
+    float z_ = z;
+    pop_n_elems(args);
+    al_transform_coordinates_3d_projective(THIS->transform, &x_, &y_, &z_);
+    push_float(x_);
+    push_float(y_);
+    push_float(z_);
+    f_aggregate(3);
+
+} // transform_coordinates_3d_projective()
+*/
+
+/*! @decl void compose(object other)
+ *! Compose (combine) two transformations by a matrix multiplication.
+ *!
+ *! @param other
+ *! Transformation used to transform this one.
+ */
+PIKEFUN void compose(object other)
+{
+    ALLEGRO_TRANSFORM* p0 = OBJ2_TRANSFORM(other)->transform;
+    al_compose_transform(THIS->transform, p0);
+    pop_n_elems(args);
+
+} // compose()
+
+/*! @decl void orthographic(float left, float top, float n, float right, float bottom, float f)
+ *!
+ *! @param left
+ *! @param top
+ *! @param n
+ *! @param right
+ *! @param bottom
+ *! @param f
+ */
+PIKEFUN void orthographic(float left, float top, float n, float right,
+        float bottom, float f)
+{
+    al_orthographic_transform(THIS->transform, left, top, n, right, bottom, f);
+    pop_n_elems(args);
+
+} // orthographic() 
+
+/*! @decl void perspective(float left, float top, float n, float right, float bottom, float f)
+ *!
+ *! @param left
+ *! @param top
+ *! @param n
+ *! @param right
+ *! @param bottom
+ *! @param f
+ */
+PIKEFUN void perspective(float left, float top, float n, float right,
+        float bottom, float f)
+{
+    al_perspective_transform(THIS->transform, left, top, n, right, bottom, f);
+    pop_n_elems(args);
+
+} // perspective() 
+
+/*! @decl void translate_3d(float x, float y, float z)
+ */
+PIKEFUN void translate_3d(float x, float y, float z)
+{
+    al_translate_transform_3d(THIS->transform, x, y, z);
+    pop_n_elems(args);
+
+} // translate_3d()
+
+/*! @decl void scale_3d(float sx, float sy, float sz)
+ */
+PIKEFUN void scale_3d(float sx, float sy, float sz)
+{
+    al_scale_transform_3d(THIS->transform, sx, sy, sz);
+    pop_n_elems(args);
+
+} // scale_3d()
+
+/*! @decl void rotate_3d(float x, float y, float z, float angle)
+ */
+PIKEFUN void rotate_3d(float x, float y, float z, float angle)
+{
+    al_rotate_transform_3d(THIS->transform, x, y, z, angle);
+    pop_n_elems(args);
+
+} // rotate_3d()
+
+/*! @decl void horizontal_shear(float theta) 
+ */
+PIKEFUN void horizontal_shear(float theta)
+{
+    al_horizontal_shear_transform(THIS->transform, theta);
+    pop_n_elems(args);
+
+} // horizontal_shear()
+
+/*! @decl void vertical_shear(float theta) 
+ */
+PIKEFUN void vertical_shear(float theta)
+{
+    al_vertical_shear_transform(THIS->transform, theta);
+    pop_n_elems(args);
+
+} // vertical_shear()
+
+} // PIKECLASS Transform
+/*! @endclass Transform */
+
+
+// ************************
+// *** PIKECLASS Sample ***
+// ************************
+/*! @class Sample
+ */
+PIKECLASS Sample
+{
+CVAR ALLEGRO_SAMPLE *sample;
+CVAR ALLEGRO_SAMPLE_ID *sample_id;
+
+INIT
+{
+    THIS->sample = NULL;
+} // INIT
+
+EXIT 
+{
+    if (THIS->sample)
+    {
+        al_destroy_sample(THIS->sample);
+        THIS->sample = NULL;
+    } // if
+    if (THIS->sample_id)
+    {
+        free(THIS->sample_id);
+        THIS->sample_id = NULL;
+    } // if
+} // EXIT
+
+/*! @decl void create(string filename)
+ */
+PIKEFUN void create(string filename)
+{
+    THIS->sample = al_load_sample(filename->str);
+    if (!THIS->sample)
+    {
+        Pike_error("Cannot load sample: %s\n", filename->str);
+    } // if
+    THIS->sample_id = malloc(sizeof(ALLEGRO_SAMPLE_ID));
+    pop_n_elems(args);
+
+} // create()
+
+/*! @decl int(0..1) play()
+ */
+PIKEFUN int(0..1) play()
+{
+    bool result = al_play_sample(THIS->sample, 1.0, 0.0, 1.0,
+            ALLEGRO_PLAYMODE_ONCE, THIS->sample_id);
+    RETURN(result ? 1 : 0);
+
+} // play()
+
+/*! @decl int(0..1) play(int playmode, float gain)
+ */
+PIKEFUN int(0..1) play(int playmode, float gain)
+{
+    bool result = al_play_sample(THIS->sample, gain, 0.0, 1.0, playmode,
+            THIS->sample_id);
+    RETURN(result ? 1 : 0);
+
+} // play()
+
+/*! @decl void stop()
+ */
+PIKEFUN void stop()
+{
+    al_stop_sample(THIS->sample_id);
+
+} // stop()
+
+} // PIKECLASS Sample
+/*! @endclass Sample */
+
+
+// ************************
+// *** PIKECLASS Shader ***
+// ************************
+/*! @class Shader */
+PIKECLASS Shader
+{
+CVAR ALLEGRO_SHADER* shader;
+
+INIT 
+{
+    THIS->shader = NULL;
+} // INIT
+
+EXIT
+{
+    al_destroy_shader(THIS->shader);
+    THIS->shader = NULL;
+} // EXIT
+
+/*! @decl void create(int platform)
+ *!
+ *! @param platform
+ *! Either @[Allegro.SHADER_AUTO], @[Allegro.SHADER_GLSL] or @[Allegro.SHADER_HLSL].
+ */
+PIKEFUN void create(int platform)
+{
+    THIS->shader = al_create_shader(platform);
+    pop_n_elems(args);
+    if (!THIS->shader)
+    {
+        Pike_error("Cannot create shader.\n");
+    } // if
+
+} // create()
+
+/*! @decl int(0..1) attach_source(int type, string source) 
+ *! @param type
+ *!
+ *! @param source
+ *!
+ *! @returns
+ *!
+ */
+PIKEFUN int(0..1) attach_source(int type, string source)
+{
+    bool b = al_attach_shader_source(THIS->shader, type, source->str);
+    RETURN(b ? 1 : 0);
+
+} // attach_source()
+
+/*! @decl int(0..1) attach_source_file(int type, string filename)
+ *! @param type
+ *!
+ *! @param filename
+ *!
+ *! @returns
+ */
+PIKEFUN int(0..1) attach_source_file(int type, string filename)
+{
+    bool b = al_attach_shader_source_file(THIS->shader, type, filename->str);
+    RETURN(b ? 1 : 0);
+
+} // attach_source_file()
+
+/*! @decl int(0..1) build()
+ *! @returns
+ */
+PIKEFUN int(0..1) build()
+{
+    bool b = al_build_shader(THIS->shader);
+    RETURN(b ? 1 : 0);
+
+} // build()
+
+/*! @decl string get_log()
+ *!
+ *! @returns
+ */
+PIKEFUN string get_log()
+{
+    const char* log = al_get_shader_log(THIS->shader);
+    pop_n_elems(args);
+    push_text(log);
+
+} // get_log()
+
+/*! @decl int get_platform()
+ *!
+ *! @returns
+ */
+PIKEFUN int get_platform()
+{
+    RETURN(al_get_shader_platform(THIS->shader));
+
+} // get_platform()
+
+/*! @decl int(0..1) use()
+ *!
+ *! @param b
+ *! 1 to use shader; 0 to stop using it.
+ *!
+ *! @returns
+ */
+PIKEFUN int(0..1) use(int(0..1) b)
+{
+    if (b)
+    {
+        RETURN(al_use_shader(THIS->shader) ? 1 : 0);
+    }
+    else
+    {
+        RETURN(al_use_shader(NULL) ? 1 : 0);
+    } // if ... else
+
+} // use()
+
+/*! @decl int(0..1) set_int()
+ *!
+ *! @param name
+ *! @param i
+ *!
+ *! @returns
+ */
+PIKEFUN int(0..1) set_int(string name, int i)
+{
+    RETURN(al_set_shader_int(name->str, i) ? 1 : 0);
+
+} // set_int()
+
+/*! @decl int(0..1) set_float()
+ */
+PIKEFUN int(0..1) set_float(string name, float i)
+{
+    RETURN(al_set_shader_float(name->str, i) ? 1 : 0);
+
+} // set_float()
+
+/*! @decl int(0..1) set_uniform()
+ */
+PIKEFUN int(0..1) set_uniform(string name, int i)
+{
+    RETURN(1);
+} // set_uniform()
+/*! @decl int(0..1) set_uniform()
+ */
+PIKEFUN int(0..1) set_uniform(string name, float i)
+{
+    RETURN(1);
+} // set_uniform()
+
+} // PIKECLASS Shader
+/*! @endclass Shader */
+
+/*! @decl int(0..1) set_shader_sampler(string name, object bitmap, int unit)
+ *!
+ *! @param name
+ *!
+ *! @param bitmap
+ *!
+ *! @param unit
+ *!
+ *! @returns
+ *!
+ */
+PIKEFUN int(0..1) set_shader_sampler(string name, object bitmap, int unit)
+{
+    ALLEGRO_BITMAP* arg1 = OBJ2_BITMAP(bitmap)->bitmap;
+    bool b = al_set_shader_sampler(name->str, arg1, unit);
+    RETURN(b ? 1 : 0);
+
+} // set_shader_sampler()
+
+/*! @decl string get_default_shader_source(int platform, int type)
+ *!
+ *! @param platform
+ *!
+ *! @param type
+ *!
+ */
+PIKEFUN string get_default_shader_source(int platform, int type)
+{
+    char const* source = al_get_default_shader_source(platform, type);
+    pop_n_elems(args);
+    push_text(source);
+
+} // get_default_shader_source()
+
+
+// **************************************
+// *** METHODS FOR 'PRIMITIVES' ADDON ***
+// **************************************
+/*! @decl void draw_line(float x1, float y1, float x2, float y2, object color,@
+ *!                      float thickness)
+ */
+PIKEFUN void draw_line(float x1, float y1, float x2, float y2, object color,
+        float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_line(x1, y1, x2, y2, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_line()
+
+/*! @decl void draw_triangle(float x1, float y1, float x2, float y2, float x3,@
+ *!                          float y3, object color, float thickness)
+ */
+PIKEFUN void draw_triangle(float x1, float y1, float x2, float y2, float x3,
+        float y3, object color, float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_triangle(x1, y1, x2, y2, x3, y3, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_triangle()
+
+/*! @decl void draw_filled_triangle(float x1, float y1, float x2, float y2,@
+ *!                                 float x3, float y3, object color)
+ */
+PIKEFUN void draw_filled_triangle(float x1, float y1, float x2, float y2,
+        float x3, float y3, object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_filled_triangle(x1, y1, x2, y2, x3, y3, p1);
+    pop_n_elems(args);
+
+} // draw_filled_triangle()
+
+/*! @decl void draw_rectangle(float x1, float y1, float x2, float y2,@
+ *!                           object color, float thickness)
+ */
+PIKEFUN void draw_rectangle(float x1, float y1, float x2, float y2, 
+        object color, float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_rectangle(x1, y1, x2, y2, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_rectangle()
+
+/*! @decl void draw_filled_rectangle(float x1, float y1, float x2, float y2,@
+ *!                                  object color)
+ */
+PIKEFUN void draw_filled_rectangle(float x1, float y1, float x2, float y2, 
+        object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_filled_rectangle(x1, y1, x2, y2, p1);
+    pop_n_elems(args);
+
+} // draw_filled_rectangle()
+
+/*! @decl void draw_rounded_rectangle(float x1, float y1, float x2, float y2,@
+ *!         float rx, float ry, object color, float thickness)
+ */
+PIKEFUN void draw_rounded_rectangle(float x1, float y1, float x2, float y2,
+        float rx, float ry, object color, float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_rounded_rectangle(x1, y1, x2, y2, rx, ry, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_rounded_rectangle()
+
+/*! @decl void draw_circle(float cx, float cy, float r, object color,@
+ *!                        float thickness)
+ */
+PIKEFUN void draw_circle(float cx, float cy, float r, object color,
+        float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_circle(cx, cy, r, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_circle()
+
+/*! @decl void draw_filled_circle(float cx, float cy, float r, object color)
+ */
+PIKEFUN void draw_filled_circle(float cx, float cy, float r, object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_filled_circle(cx, cy, r, p1);
+    pop_n_elems(args);
+
+} // draw_filled_circle()
+
+/*! @decl void draw_polyline(array(float) vertices, int join_style, int cap_style, object color, float thickness, float miter_limit)
+ */
+PIKEFUN void draw_polyline(array(float) vertices, int join_style,
+        int cap_style, object color, float thickness, float miter_limit)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    struct array* arr = Pike_sp[-6].u.array;
+    int num_vertices;
+    float* vertices_copy;
+    int i; 
+
+    num_vertices = arr->size;
+    vertices_copy = malloc(sizeof(float) * num_vertices);
+    for (i = 0; i < arr->size; ++i)
+    {
+        vertices_copy[i] = arr->item[i].u.float_number;
+    } // for
+
+    al_draw_polyline(vertices_copy, 2*sizeof(float), num_vertices, join_style,
+            cap_style, p1, thickness, miter_limit);
+
+    free(vertices_copy);
+    pop_n_elems(args);
+
+} // draw_polyline()
+
+/*! @decl int draw_prim(array(float) vertices, array(object) colors, int type)
+ */
+PIKEFUN int draw_prim(
+        array(float) vertices,
+        array(object) colors,
+        int type)
+{
+    struct array* arr = Pike_sp[-4].u.array;
+    struct array* arr_colors = Pike_sp[-3].u.array;
+    ALLEGRO_COLOR c = OBJ2_COLOR(arr_colors->item[0].u.object)->color;
+    // 6 elements for each vertex: x,y,z,u,v, and a color.
+    int n = arr->size / 5;
+
+    /*
+    ALLEGRO_VERTEX avs[n];
+    for (int i = 0; i < n; ++i)
+    {
+        printf("i=%d\n", i);
+        avs[0].x = arr->item[i*5].u.float_number;
+        avs[0].y = arr->item[i*5+1].u.float_number,
+        avs[0].z = arr->item[i*5+2].u.float_number,
+        avs[0].u = arr->item[i*5+3].u.float_number,
+        avs[0].v = arr->item[i*5+4].u.float_number,
+        avs[0].color = OBJ2_COLOR(arr_colors->item[i].u.object)->color;
+    } // for
+    */
+    ALLEGRO_COLOR white = al_map_rgb_f(1,1,1);
+    ALLEGRO_VERTEX avs[] = {
+        { 0, 20, 0, 4, 4, white },
+        { -20, -20, -21, 4, 4, white },
+        { 21, -21, -21, 4, 4, white }
+    };
+    //RETURN( al_draw_prim(&avs, NULL, NULL, 0, 3, type) );
+    int m = al_draw_prim(avs, NULL, NULL, 0, 3, type);
+    printf("m=%d\n", m);
+    RETURN(m);
+
+} // draw_prim()
+    
+/*! @decl void draw_pixel(float x, float y, object color)
+ *! Draws a single pixel at x,y.
+ */
+PIKEFUN void draw_pixel(float x, float y, object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_pixel(x, y, p1);
+    pop_n_elems(args);
+
+} // draw_pixel()
+
+/*! @decl void draw_pieslice(float cx, float cy, float r, float start_theta,@
+ *!     float delta_theta, object color, float thickness)
+ */
+PIKEFUN void draw_pieslice(float cx, float cy, float r, float start_theta,
+        float delta_theta, object color, float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_pieslice(cx, cy, r, start_theta, delta_theta, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_pieslice()
+
+/*! @decl void draw_filled_pieslice(float cx, float cy, float r,@
+ *!     float start_theta, float delta_theta, object color, float thickness)
+ */
+PIKEFUN void draw_filled_pieslice(float cx, float cy, float r,
+        float start_theta, float delta_theta, object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_filled_pieslice(cx, cy, r, start_theta, delta_theta, p1);
+    pop_n_elems(args);
+
+} // draw_filled_pieslice()
+
+/*! @decl void draw_ellipse(float cx, float cy, float rx, float ry,@
+ *!     object color, float thickness)
+ */
+PIKEFUN void draw_ellipse(float cx, float cy, float rx, float ry, object color,
+        float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_ellipse(cx, cy, rx, ry, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_ellipse()
+
+/*! @decl void draw_filled_ellipse(float cx, float cy, float rx, float ry,@
+ *!     object color, float thickness)
+ */
+PIKEFUN void draw_filled_ellipse(float cx, float cy, float rx, float ry,
+        object color)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_filled_ellipse(cx, cy, rx, ry, p1);
+    pop_n_elems(args);
+
+} // draw_filled_ellipse()
+
+/*! @decl void draw_arc(float cx, float cy, float r, float start_theta,@
+ *!     float delta_theta, object color, float thickness)
+ */
+PIKEFUN void draw_arc(float cx, float cy, float r, float start_theta,
+        float delta_theta, object color, float thickness)
+{
+    ALLEGRO_COLOR p1 = OBJ2_COLOR(color)->color;
+    al_draw_arc(cx, cy, r, start_theta, delta_theta, p1, thickness);
+    pop_n_elems(args);
+
+} // draw_arc()
+
+
+/*! @decl void set_target_backbuffer(object display)
+ */
+PIKEFUN void set_target_backbuffer(object display)
+{
+    ALLEGRO_DISPLAY* p1 = OBJ2_DISPLAY(display)->display;
+    al_set_target_backbuffer(p1);
+
+} // set_target_backbuffer()
+
+/*! @decl void set_render_state(int state, int value)
+ */
+PIKEFUN void set_render_state(int state, int value)
+{
+    al_set_render_state(state, value);
+
+} // set_render_state()
+
+/*! @decl void set_new_display_option(int option, int value, int importance)
+ */
+PIKEFUN void set_new_display_option(int option, int value, int importance)
+{
+    al_set_new_display_option(option, value, importance);
+
+} // set_new_display_option()
+
+/*! @decl void clear_depth_buffer(float z)
+ */
+PIKEFUN void clear_depth_buffer(float z)
+{
+    al_clear_depth_buffer(z);
+
+} // clear_depth_buffer()
+
+PIKE_MODULE_INIT
+{
+    INIT;
+    init_allegro_constants();
+    keyboard_state = (ALLEGRO_KEYBOARD_STATE*) 
+            malloc(sizeof(ALLEGRO_KEYBOARD_STATE));
+    mouse_state = (ALLEGRO_MOUSE_STATE*) malloc(sizeof(ALLEGRO_MOUSE_STATE));
+} // PIKE_MODULE_INIT
+
+PIKE_MODULE_EXIT
+{
+    if (keyboard_state)
+    {
+        free(keyboard_state);
+        keyboard_state = NULL;
+    } // if
+    if (mouse_state)
+    {
+        free(mouse_state);
+        mouse_state = NULL;
+    } // if
+    EXIT;
+} // PIKE_MODULE_EXIT
+
+/*! @endmodule Allegro */
+
+
